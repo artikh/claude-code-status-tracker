@@ -21,6 +21,14 @@ usage:
 usage-dev:
     uv run usage.py --dev
 
+# Show latest sessions from production data
+sessions:
+    uv run sessions.py
+
+# Show latest sessions from dev data
+sessions-dev:
+    uv run sessions.py --dev
+
 # Generate PDF report from production data
 report:
     uv run report_pdf.py
@@ -31,7 +39,7 @@ report-dev:
 
 # Run type checker
 typecheck:
-    uv run mypy track-and-status.py compact.py usage.py report_pdf.py tests/
+    uv run mypy track-and-status.py compact.py usage.py sessions.py report_pdf.py tests/
 
 # Run all checks
 check: typecheck test
