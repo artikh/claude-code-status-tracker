@@ -17,6 +17,7 @@ A status line and usage tracker for [Claude Code](https://docs.anthropic.com/en/
 **Usage tracking** — logs every session and provides analytics:
 
 ```bash
+just sessions     # latest sessions table (most recent first)
 just usage        # terminal report: today, this week, billing period, by workspace
 just report       # PDF report for finished billing periods
 ```
@@ -52,6 +53,7 @@ After install, add to your `~/.claude/settings.json`:
 
 | Command | Description |
 |---------|-------------|
+| `just sessions` | Latest sessions table (last 20, `--all` for all) |
 | `just usage` | Terminal usage report (current billing period) |
 | `just report` | PDF report for finished billing periods |
 | `just compact` | Compact session logs into stats CSV |
@@ -71,6 +73,7 @@ Subscription billing periods are configured in `data/settings.json` and support 
 ```
 track-and-status.py   # Status line script (entry point)
 compact.py            # Session log compaction
+sessions.py           # Latest sessions table
 usage.py              # Terminal usage analytics
 report_pdf.py         # PDF report generator
 install.sh            # Prerequisite checker

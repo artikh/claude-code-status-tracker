@@ -88,6 +88,21 @@ just usage-dev       # dev data
 
 **Output sections:** Time periods (Today, Yesterday, This Week, This Month, Billing Period), workspace breakdown, and hourly activity histogram.
 
+## Sessions (`sessions.py`)
+
+CLI script that displays individual sessions in a table, sorted by most recent. Reads from `data/stats.csv` (same as `usage.py`). Uses [rich](https://github.com/Textualize/rich) for table rendering and [humanize](https://github.com/python-humanize/humanize) for relative timestamps.
+
+```bash
+just sessions        # production data (last 20 sessions)
+just sessions-dev    # dev data
+```
+
+**Columns:** Last Active (relative time), Project, Model, Cost, Duration, Lines (+/-), Tokens (in/out), Context %.
+
+**Options:** `--limit N` to change row count, `--all` to show everything, `--dev` for dev data. Sessions under 3 seconds are filtered out. No active subscription required (costs default to `$` if none configured).
+
+**Rendering:** `rich.table.Table` handles column sizing, alignment, and ANSI color. Color is auto-detected via `isatty()` and disabled when piped.
+
 ## PDF Reports (`report_pdf.py`)
 
 Generates a PDF report covering **all finished subscriptions** (where `end < today`), reusing the analytics layer from `usage.py`.
