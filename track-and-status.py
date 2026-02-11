@@ -19,7 +19,7 @@ RESET = "\033[0m"
 CACHE_FILE = "/tmp/claudecode-stage-cache"
 CACHE_MAX_AGE = 30  # seconds
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 LOG_DIR = os.path.join(SCRIPT_DIR, "data")
 LOG_FILE = os.path.join(LOG_DIR, "session.jsonl")
 
