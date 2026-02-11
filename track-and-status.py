@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import time
+from datetime import datetime, timezone
 
 # ANSI colors
 GREEN = "\033[32m"
@@ -17,6 +18,26 @@ RESET = "\033[0m"
 
 CACHE_FILE = "/tmp/claudecode-stage-cache"
 CACHE_MAX_AGE = 30  # seconds
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_DIR = os.path.join(SCRIPT_DIR, "data")
+LOG_FILE = os.path.join(LOG_DIR, "session.jsonl")
+
+
+def log_event(data: dict, session_id: str) -> str | None:
+    """Append a JSON line to the session log. Returns error string on failure."""
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "session_id": session_id,
+            "data": data,
+        }
+        with open(LOG_FILE, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception as e:
+        return str(e)
+    return None
 
 
 def get_stage(cwd: str) -> str:
@@ -71,6 +92,8 @@ def main() -> None:
     cwd = data.get("workspace", {}).get("current_dir", "")
     session_id = data.get("session_id", "")
 
+    log_err = log_event(data, session_id)
+
     bar, bar_color = build_bar(pct)
     stage = get_stage(cwd)
 
@@ -82,6 +105,8 @@ def main() -> None:
     if stage:
         parts.append(stage)
     parts.append(f"{YELLOW}${cost:.2f}{RESET}")
+    if log_err:
+        parts.append(f"{RED}[LOG ERR]{RESET}")
 
     sep = f" {DIM}|{RESET} "
     print(sep.join(parts))
