@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Run checks only when Python files are staged
+staged=$(git diff --cached --name-only)
+if echo "$staged" | grep -q '\.py$'; then
+    echo "Pre-commit: Python files staged, running checks..."
+    just check
+fi
