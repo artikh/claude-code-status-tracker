@@ -1,10 +1,16 @@
 {
   "hooks": {
     "PostToolUse": [
-      {
+      { 
         "matcher": "Edit|Write",
-        "command": ".claude/hooks/run-tests-on-edit.sh"
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/run-tests-on-edit.sh"
+          }
+        ]
       }
     ]
   }
 }
+
