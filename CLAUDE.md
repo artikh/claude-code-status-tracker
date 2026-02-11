@@ -73,9 +73,25 @@ These fields are sent by Claude Code on stdin:
 echo '{"model":{"display_name":"Opus"},"context_window":{"used_percentage":17},"cost":{"total_cost_usd":0.45,"total_lines_added":156,"total_lines_removed":23},"workspace":{"current_dir":"/src/langcardhelper"},"session_id":"abc123"}' | python3 track-and-status.py
 ```
 
+## Usage Analytics (`usage.py`)
+
+CLI script that displays session stats grouped by time periods and workspace, reading from `data/stats.csv`.
+
+```bash
+just usage           # production data
+just usage-dev       # dev data
+```
+
+**Architecture:** Three layers — data loading, pure analytics (DataFrame → dataclasses), and terminal rendering. The `build_report()` function returns a `UsageReport` dataclass tree, making it easy to add alternative renderers (e.g. PDF) without rewriting analytics code.
+
+**Settings:** `data/settings.json` configures billing period dates and timezone (IANA names). All fields optional.
+
+**Output sections:** Time periods (Today, Yesterday, This Week, This Month, Billing Period), workspace breakdown, and hourly activity histogram.
+
 ## Planned Features
 
 - Persistent session tracking using `session_id` (scope TBD)
+- PDF export for usage reports (import `build_report()` from `usage.py`)
 
 ## Build & Run
 

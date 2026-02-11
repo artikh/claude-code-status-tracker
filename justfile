@@ -10,9 +10,17 @@ compact:
 compact-dev:
     uv run compact.py --dev
 
+# Show usage stats from production data
+usage:
+    uv run usage.py
+
+# Show usage stats from dev data
+usage-dev:
+    uv run usage.py --dev
+
 # Run type checker
 typecheck:
-    uv run mypy track-and-status.py compact.py tests/
+    uv run mypy track-and-status.py compact.py usage.py tests/
 
 # Run all checks
 check: typecheck test
