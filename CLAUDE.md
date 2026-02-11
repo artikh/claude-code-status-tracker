@@ -88,10 +88,25 @@ just usage-dev       # dev data
 
 **Output sections:** Time periods (Today, Yesterday, This Week, This Month, Billing Period), workspace breakdown, and hourly activity histogram.
 
+## PDF Reports (`report_pdf.py`)
+
+Generates a PDF report covering **all finished subscriptions** (where `end < today`), reusing the analytics layer from `usage.py`.
+
+```bash
+just report          # production data → data/usage-report.pdf
+just report-dev      # dev data → data/dev/usage-report.pdf
+uv run report_pdf.py --output custom.pdf
+```
+
+**Page structure:**
+1. **Title page** — generation timestamp, summary table of all finished subscriptions (plan, period, budget, used, %, sessions)
+2. **Per-subscription pages** — overall stats, workspace table, hourly activity histograms (lines changed in blue, cost in gold)
+
+Uses fpdf2 with built-in Helvetica (cp1252 covers $, £, €). Imports `SubscriptionReport` dataclass and `build_subscription_report()` for programmatic use.
+
 ## Planned Features
 
 - Persistent session tracking using `session_id` (scope TBD)
-- PDF export for usage reports (import `build_report()` from `usage.py`)
 
 ## Build & Run
 

@@ -455,7 +455,7 @@ CURRENCY_SYMBOLS: dict[str, str] = {
 }
 
 
-def _fmt_cost(
+def fmt_cost(
     value: float,
     sub: Subscription | None = None,
     currency: str | None = None,
@@ -480,7 +480,7 @@ def _fmt_cost(
     return f"{symbol}{v:.2f}"
 
 
-def _fmt_duration(ms: float) -> str:
+def fmt_duration(ms: float) -> str:
     """Format milliseconds as human-readable duration."""
     total_seconds = int(ms / 1000)
     if total_seconds < 60:
@@ -498,7 +498,7 @@ def _fmt_duration(ms: float) -> str:
     return f"{hours}h"
 
 
-def _fmt_tokens(n: int) -> str:
+def fmt_tokens(n: int) -> str:
     """Format token counts with K/M suffix."""
     if n >= 1_000_000:
         return f"{n / 1_000_000:.1f}M"
@@ -507,7 +507,7 @@ def _fmt_tokens(n: int) -> str:
     return str(n)
 
 
-def _fmt_number(n: int) -> str:
+def fmt_number(n: int) -> str:
     """Format integer with thousands separator."""
     return f"{n:,}"
 
@@ -519,13 +519,13 @@ def _strip_ansi(text: str) -> str:
     return re.sub(r"\033\[[0-9;]*m", "", text)
 
 
-def _fmt_currency(amount: float, currency: str) -> str:
+def fmt_currency(amount: float, currency: str) -> str:
     """Format amount with currency symbol (e.g. £150.00)."""
     symbol = CURRENCY_SYMBOLS.get(currency, currency + " ")
     return f"{symbol}{amount:.2f}"
 
 
-def _fmt_sub_pct(
+def fmt_sub_pct(
     cost: float, sub: Subscription | None, color: bool,
     pre_converted: bool = False,
 ) -> str:
@@ -570,15 +570,15 @@ def _render_period_stats(
 
     lines: list[str] = []
 
-    sub_pct = _fmt_sub_pct(s.total_cost, sub, color, pre_converted=currency is not None)
+    sub_pct = fmt_sub_pct(s.total_cost, sub, color, pre_converted=currency is not None)
     lines.append(
         f"  Sessions: {s.session_count}    "
-        f"Cost: {y}{_fmt_cost(s.total_cost, sub, currency)}{x}{sub_pct}    "
-        f"Lines: {g}+{_fmt_number(s.lines_added)}{x} / {r}-{_fmt_number(s.lines_removed)}{x}"
+        f"Cost: {y}{fmt_cost(s.total_cost, sub, currency)}{x}{sub_pct}    "
+        f"Lines: {g}+{fmt_number(s.lines_added)}{x} / {r}-{fmt_number(s.lines_removed)}{x}"
     )
 
-    dur_str = _fmt_duration(s.duration_ms)
-    api_str = _fmt_duration(s.api_duration_ms)
+    dur_str = fmt_duration(s.duration_ms)
+    api_str = fmt_duration(s.api_duration_ms)
     ratio_str = ""
     if s.api_wait_ratio is not None:
         ratio_str = f" ({s.api_wait_ratio:.0%})"
@@ -586,9 +586,9 @@ def _render_period_stats(
 
     parts: list[str] = []
     if s.cost_per_line is not None:
-        parts.append(f"Cost/line: {_fmt_cost(s.cost_per_line, sub, currency)}")
+        parts.append(f"Cost/line: {fmt_cost(s.cost_per_line, sub, currency)}")
     parts.append(
-        f"Tokens: {_fmt_tokens(s.total_input_tokens)} in / {_fmt_tokens(s.total_output_tokens)} out"
+        f"Tokens: {fmt_tokens(s.total_input_tokens)} in / {fmt_tokens(s.total_output_tokens)} out"
     )
     lines.append("  " + "    ".join(parts))
 
@@ -599,7 +599,7 @@ def _render_period_stats(
         extra.append(f"Extended context: {s.extended_context_count}")
     if s.output_tokens_per_dollar is not None:
         extra.append(
-            f"Output tokens/$: {_fmt_tokens(int(s.output_tokens_per_dollar))}"
+            f"Output tokens/$: {fmt_tokens(int(s.output_tokens_per_dollar))}"
         )
     if extra:
         lines.append(f"  {d}{'    '.join(extra)}{x}")
@@ -623,7 +623,7 @@ def render_terminal(report: UsageReport, color: bool = True) -> str:
     if sub:
         lines.append(
             f"{d}Generated: {generated} {tz_name}    "
-            f"Plan: {sub.plan} ({_fmt_currency(sub.cost, sub.currency)}){x}"
+            f"Plan: {sub.plan} ({fmt_currency(sub.cost, sub.currency)}){x}"
         )
     else:
         lines.append(f"{d}Generated: {generated} {tz_name}{x}")
@@ -677,7 +677,7 @@ def render_terminal(report: UsageReport, color: bool = True) -> str:
                     continue
                 bar_width = int(count / max_lines * max_bar_width)
                 bar = "\u2588" * bar_width
-                lines.append(f"  {hour:02d}:00  {bar} {_fmt_number(count)}")
+                lines.append(f"  {hour:02d}:00  {bar} {fmt_number(count)}")
             lines.append("")
 
         # Cost histogram
@@ -690,7 +690,7 @@ def render_terminal(report: UsageReport, color: bool = True) -> str:
                 bar_width = int(amount / max_cost * max_bar_width)
                 bar = "\u2588" * bar_width
                 lines.append(
-                    f"  {hour:02d}:00  {bar} {_fmt_cost(amount, sub)}"
+                    f"  {hour:02d}:00  {bar} {fmt_cost(amount, sub)}"
                 )
             lines.append("")
 

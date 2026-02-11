@@ -4,10 +4,10 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = ["pandas"]
+dependencies = ["pandas", "fpdf2>=2.7.0"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 
 [dependency-groups]
-dev = ["pytest", "mypy", "pandas-stubs"]
+dev = ["pytest", "mypy", "pandas-stubs", "types-fpdf2"]

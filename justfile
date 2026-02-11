@@ -18,9 +18,17 @@ usage:
 usage-dev:
     uv run usage.py --dev
 
+# Generate PDF report from production data
+report:
+    uv run report_pdf.py
+
+# Generate PDF report from dev data
+report-dev:
+    uv run report_pdf.py --dev
+
 # Run type checker
 typecheck:
-    uv run mypy track-and-status.py compact.py usage.py tests/
+    uv run mypy track-and-status.py compact.py usage.py report_pdf.py tests/
 
 # Run all checks
 check: typecheck test

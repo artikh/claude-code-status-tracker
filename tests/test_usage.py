@@ -31,47 +31,7 @@ from usage import (
 )
 
 
-def make_sessions_df(
-    rows: list[dict],
-) -> pd.DataFrame:
-    """Build a DataFrame mimicking load_sessions output with sensible defaults."""
-    defaults = {
-        "session_id": "sess-1",
-        "first_active": "2026-02-11T10:00:00+00:00",
-        "last_active": "2026-02-11T10:30:00+00:00",
-        "model_id": "claude-opus-4-6",
-        "model_name": "Opus 4.6",
-        "project_dir": "/src/project",
-        "current_dir": "/src/project",
-        "transcript_path": "/transcripts/sess-1.jsonl",
-        "claude_code_version": "2.1.39",
-        "cost_usd": 1.0,
-        "duration_ms": 600000,
-        "api_duration_ms": 300000,
-        "lines_added": 100,
-        "lines_removed": 20,
-        "total_input_tokens": 10000,
-        "total_output_tokens": 5000,
-        "context_window_size": 200000,
-        "context_used_pct": 25.0,
-        "exceeds_200k_tokens": False,
-    }
-    full_rows = []
-    for i, row in enumerate(rows):
-        r = {**defaults, **row}
-        if "session_id" not in row:
-            r["session_id"] = f"sess-{i + 1}"
-        full_rows.append(r)
-
-    df = pd.DataFrame(full_rows)
-    for col in ("first_active", "last_active"):
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], utc=True, format="mixed")
-    for col in usage.NUMERIC_COLUMNS:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df
-
+from conftest import make_sessions_df
 
 UTC = ZoneInfo("UTC")
 
@@ -653,32 +613,32 @@ class TestMainCli:
 
 class TestFormatHelpers:
     def test_fmt_cost_usd_default(self) -> None:
-        assert usage._fmt_cost(0.0) == "$0.00"
-        assert usage._fmt_cost(13.71) == "$13.71"
-        assert usage._fmt_cost(0.0047) == "$0.0047"
+        assert usage.fmt_cost(0.0) == "$0.00"
+        assert usage.fmt_cost(13.71) == "$13.71"
+        assert usage.fmt_cost(0.0047) == "$0.0047"
 
     def test_fmt_cost_converts_to_sub_currency(self) -> None:
         sub = Subscription("Max", 150, "GBP", date(2026, 1, 1), date(2026, 1, 31), 1.25)
         # $12.50 / 1.25 = £10.00
-        assert usage._fmt_cost(12.50, sub) == "£10.00"
+        assert usage.fmt_cost(12.50, sub) == "£10.00"
         # $1.25 / 1.25 = £1.00
-        assert usage._fmt_cost(1.25, sub) == "£1.00"
+        assert usage.fmt_cost(1.25, sub) == "£1.00"
 
     def test_fmt_duration(self) -> None:
-        assert usage._fmt_duration(0) == "0s"
-        assert usage._fmt_duration(45000) == "45s"
-        assert usage._fmt_duration(120000) == "2m"
-        assert usage._fmt_duration(150000) == "2m 30s"
-        assert usage._fmt_duration(3600000) == "1h"
-        assert usage._fmt_duration(6540000) == "1h 49m"
+        assert usage.fmt_duration(0) == "0s"
+        assert usage.fmt_duration(45000) == "45s"
+        assert usage.fmt_duration(120000) == "2m"
+        assert usage.fmt_duration(150000) == "2m 30s"
+        assert usage.fmt_duration(3600000) == "1h"
+        assert usage.fmt_duration(6540000) == "1h 49m"
 
     def test_fmt_tokens(self) -> None:
-        assert usage._fmt_tokens(500) == "500"
-        assert usage._fmt_tokens(1000) == "1K"
-        assert usage._fmt_tokens(347000) == "347K"
-        assert usage._fmt_tokens(1500000) == "1.5M"
+        assert usage.fmt_tokens(500) == "500"
+        assert usage.fmt_tokens(1000) == "1K"
+        assert usage.fmt_tokens(347000) == "347K"
+        assert usage.fmt_tokens(1500000) == "1.5M"
 
     def test_fmt_number(self) -> None:
-        assert usage._fmt_number(0) == "0"
-        assert usage._fmt_number(2429) == "2,429"
-        assert usage._fmt_number(1000000) == "1,000,000"
+        assert usage.fmt_number(0) == "0"
+        assert usage.fmt_number(2429) == "2,429"
+        assert usage.fmt_number(1000000) == "1,000,000"
