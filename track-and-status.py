@@ -18,26 +18,53 @@ RESET = "\033[0m"
 
 CACHE_FILE = "/tmp/claudecode-stage-cache"
 CACHE_MAX_AGE = 30  # seconds
+COMPACT_MAX_AGE = 3600  # seconds
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 LOG_DIR = os.path.join(SCRIPT_DIR, "data")
-LOG_FILE = os.path.join(LOG_DIR, "session.jsonl")
 
 
-def log_event(data: dict, session_id: str) -> str | None:
+def get_log_file() -> str:
+    """Return the log file path based on COLLECT_USAGE env var."""
+    if os.environ.get("COLLECT_USAGE") == "prod":
+        return os.path.join(LOG_DIR, "session.jsonl")
+    return os.path.join(LOG_DIR, "dev", "session.jsonl")
+
+
+def log_event(data: dict, session_id: str, log_file: str) -> str | None:
     """Append a JSON line to the session log. Returns error string on failure."""
     try:
-        os.makedirs(LOG_DIR, exist_ok=True)
+        log_dir = os.path.dirname(log_file)
+        os.makedirs(log_dir, exist_ok=True)
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "session_id": session_id,
             "data": data,
         }
-        with open(LOG_FILE, "a") as f:
+        with open(log_file, "a") as f:
             f.write(json.dumps(entry) + "\n")
     except Exception as e:
         return str(e)
     return None
+
+
+def maybe_compact() -> None:
+    """Spawn compact.py in background if stats.csv is stale (>1 hour)."""
+    try:
+        csv_path = os.path.join(LOG_DIR, "stats.csv")
+        if os.path.exists(csv_path):
+            age = time.time() - os.path.getmtime(csv_path)
+            if age <= COMPACT_MAX_AGE:
+                return
+        import subprocess
+
+        subprocess.Popen(
+            [sys.executable, os.path.join(SCRIPT_DIR, "compact.py")],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        pass
 
 
 def get_stage(cwd: str) -> str:
@@ -92,7 +119,9 @@ def main() -> None:
     cwd = data.get("workspace", {}).get("current_dir", "")
     session_id = data.get("session_id", "")
 
-    log_err = log_event(data, session_id)
+    log_file = get_log_file()
+    log_err = log_event(data, session_id, log_file)
+    maybe_compact()
 
     bar, bar_color = build_bar(pct)
     stage = get_stage(cwd)

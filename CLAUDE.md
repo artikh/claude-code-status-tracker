@@ -14,11 +14,14 @@ Claude Code pipes JSON session data to the status line script via stdin after ea
 
 ### Deployment
 
-```
-~/.claude/statusline.sh  →  /src/claude-code-status-tracker/track-and-status.py  (symlink)
+Claude Code settings (`~/.claude/settings.json`) point to `~/.claude/statusline.sh`, which is a wrapper script (not a symlink) that sets `COLLECT_USAGE=prod` so production data is written to `data/session.jsonl`:
+
+```bash
+#!/bin/bash
+COLLECT_USAGE=prod exec /src/claude-code-status-tracker/track-and-status.py
 ```
 
-Claude Code settings (`~/.claude/settings.json`) point to `~/.claude/statusline.sh`, which is a symlink to the actual script. This decouples config from script location.
+Without `COLLECT_USAGE=prod` (e.g. manual `echo '...' | python3 track-and-status.py`), data goes to `data/dev/session.jsonl` to avoid polluting production logs.
 
 ### Current Status Line Output
 

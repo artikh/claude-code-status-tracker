@@ -3,7 +3,9 @@
 import importlib
 import io
 import json
+import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -16,8 +18,10 @@ mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
 build_bar = mod.build_bar
+get_log_file = mod.get_log_file
 get_stage = mod.get_stage
 log_event = mod.log_event
+maybe_compact = mod.maybe_compact
 main = mod.main
 
 # ── build_bar ──────────────────────────────────────────────────────────
@@ -90,15 +94,12 @@ class TestGetStage:
 
 
 class TestLogEvent:
-    def test_creates_dir_and_writes_jsonl(self, tmp_path, monkeypatch):
-        log_dir = tmp_path / "logs"
-        log_file = log_dir / "session.jsonl"
-        monkeypatch.setattr(mod, "LOG_DIR", str(log_dir))
-        monkeypatch.setattr(mod, "LOG_FILE", str(log_file))
+    def test_creates_dir_and_writes_jsonl(self, tmp_path):
+        log_file = tmp_path / "logs" / "session.jsonl"
 
-        result = log_event({"key": "val"}, "sess-1")
+        result = log_event({"key": "val"}, "sess-1", str(log_file))
         assert result is None
-        assert log_dir.exists()
+        assert log_file.parent.exists()
 
         lines = log_file.read_text().strip().splitlines()
         assert len(lines) == 1
@@ -107,28 +108,99 @@ class TestLogEvent:
         assert entry["data"] == {"key": "val"}
         assert "timestamp" in entry
 
-    def test_append_behavior(self, tmp_path, monkeypatch):
-        log_dir = tmp_path / "logs"
-        log_file = log_dir / "session.jsonl"
-        monkeypatch.setattr(mod, "LOG_DIR", str(log_dir))
-        monkeypatch.setattr(mod, "LOG_FILE", str(log_file))
+    def test_append_behavior(self, tmp_path):
+        log_file = tmp_path / "logs" / "session.jsonl"
 
-        log_event({"n": 1}, "s1")
-        log_event({"n": 2}, "s2")
+        log_event({"n": 1}, "s1", str(log_file))
+        log_event({"n": 2}, "s2", str(log_file))
 
         lines = log_file.read_text().strip().splitlines()
         assert len(lines) == 2
 
-    def test_failure_returns_error_string(self, tmp_path, monkeypatch):
-        # Point LOG_DIR to a file (not a directory) so makedirs fails
+    def test_failure_returns_error_string(self, tmp_path):
+        # Point log_file under a file (not a directory) so makedirs fails
         blocker = tmp_path / "blocker"
         blocker.write_text("I am a file")
-        monkeypatch.setattr(mod, "LOG_DIR", str(blocker / "subdir"))
-        monkeypatch.setattr(mod, "LOG_FILE", str(blocker / "subdir" / "log.jsonl"))
+        log_file = blocker / "subdir" / "log.jsonl"
 
-        result = log_event({}, "x")
+        result = log_event({}, "x", str(log_file))
         assert isinstance(result, str)
         assert len(result) > 0
+
+
+# ── get_log_file ──────────────────────────────────────────────────────
+
+
+class TestGetLogFile:
+    def test_default_is_dev(self, monkeypatch):
+        monkeypatch.delenv("COLLECT_USAGE", raising=False)
+        path = get_log_file()
+        assert path.endswith(os.path.join("data", "dev", "session.jsonl"))
+
+    def test_prod_env(self, monkeypatch):
+        monkeypatch.setenv("COLLECT_USAGE", "prod")
+        path = get_log_file()
+        assert path.endswith(os.path.join("data", "session.jsonl"))
+        assert "/dev/" not in path
+
+    def test_other_value_is_dev(self, monkeypatch):
+        monkeypatch.setenv("COLLECT_USAGE", "anything")
+        path = get_log_file()
+        assert "/dev/" in path
+
+
+# ── maybe_compact ─────────────────────────────────────────────────────
+
+
+class TestMaybeCompact:
+    def test_skips_when_csv_fresh(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mod, "LOG_DIR", str(tmp_path))
+        csv_path = tmp_path / "stats.csv"
+        csv_path.write_text("header\n")
+        # CSV is fresh (just created) — should not spawn
+        with monkeypatch.context() as m:
+            spawned = []
+            import subprocess
+
+            orig_popen = subprocess.Popen
+
+            def fake_popen(*a, **kw):
+                spawned.append(a)
+
+            m.setattr(subprocess, "Popen", fake_popen)
+            maybe_compact()
+            assert len(spawned) == 0
+
+    def test_spawns_when_csv_stale(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mod, "LOG_DIR", str(tmp_path))
+        csv_path = tmp_path / "stats.csv"
+        csv_path.write_text("header\n")
+        # Make CSV old
+        old_time = time.time() - 7200
+        os.utime(csv_path, (old_time, old_time))
+
+        spawned = []
+        import subprocess
+
+        def fake_popen(*a, **kw):
+            spawned.append(a)
+
+        monkeypatch.setattr(subprocess, "Popen", fake_popen)
+        maybe_compact()
+        assert len(spawned) == 1
+
+    def test_spawns_when_no_csv(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mod, "LOG_DIR", str(tmp_path))
+        # No stats.csv exists — should spawn
+        spawned = []
+        import subprocess
+
+        def fake_popen(*a, **kw):
+            spawned.append(a)
+
+        monkeypatch.setattr(subprocess, "Popen", fake_popen)
+        maybe_compact()
+        assert len(spawned) == 1
 
 
 # ── main (integration) ────────────────────────────────────────────────
@@ -150,11 +222,16 @@ class TestMain:
         data.update(overrides)
         return json.dumps(data)
 
-    def test_output_contains_expected_parts(self, tmp_path, monkeypatch):
+    def _setup(self, tmp_path, monkeypatch):
         log_dir = tmp_path / "logs"
+        log_file = str(log_dir / "session.jsonl")
         monkeypatch.setattr(mod, "LOG_DIR", str(log_dir))
-        monkeypatch.setattr(mod, "LOG_FILE", str(log_dir / "session.jsonl"))
+        monkeypatch.setattr(mod, "get_log_file", lambda: log_file)
+        monkeypatch.setattr(mod, "maybe_compact", lambda: None)
         monkeypatch.setattr(mod, "CACHE_FILE", str(tmp_path / "stage-cache"))
+
+    def test_output_contains_expected_parts(self, tmp_path, monkeypatch):
+        self._setup(tmp_path, monkeypatch)
         monkeypatch.setattr("sys.stdin", io.StringIO(self._make_input()))
 
         captured = io.StringIO()
@@ -170,10 +247,7 @@ class TestMain:
         assert "[LOG ERR]" not in output
 
     def test_no_log_error_on_success(self, tmp_path, monkeypatch):
-        log_dir = tmp_path / "logs"
-        monkeypatch.setattr(mod, "LOG_DIR", str(log_dir))
-        monkeypatch.setattr(mod, "LOG_FILE", str(log_dir / "session.jsonl"))
-        monkeypatch.setattr(mod, "CACHE_FILE", str(tmp_path / "stage-cache"))
+        self._setup(tmp_path, monkeypatch)
         monkeypatch.setattr("sys.stdin", io.StringIO(self._make_input()))
 
         captured = io.StringIO()
