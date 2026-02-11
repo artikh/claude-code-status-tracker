@@ -108,6 +108,18 @@ Uses fpdf2 with built-in Helvetica (cp1252 covers $, £, €). Imports `Subscrip
 
 - Persistent session tracking using `session_id` (scope TBD)
 
+## Installation
+
+After cloning, run:
+
+```bash
+bash install.sh
+```
+
+This verifies prerequisites (`claude`, `git`, `just`, `python3 >= 3.13`, `uv`) and then calls `just install`, which runs `uv sync`, git hooks, data directories, `data/settings.json`, active subscription (interactive prompt if none), `~/.claude/statusline.sh` wrapper, and `just check` for final validation.
+
+`just install` can be run directly to skip prerequisite checks.
+
 ## Build & Run
 
 ```bash
