@@ -710,6 +710,21 @@ def main() -> int:
         settings_path = SETTINGS_PATH
 
     settings = load_settings(settings_path)
+
+    today = datetime.now(settings.tz).date()
+    active_sub = find_active_subscription(settings.subscriptions, today)
+    if active_sub is None:
+        print("usage: error: no active subscription found for today", file=sys.stderr)
+        if settings.subscriptions:
+            latest = max(settings.subscriptions, key=lambda s: s.end)
+            print(
+                f"  latest subscription '{latest.plan}' ended {latest.end}",
+                file=sys.stderr,
+            )
+        else:
+            print("  no subscriptions configured in settings.json", file=sys.stderr)
+        return 1
+
     df = load_sessions(csv_path)
 
     if df.empty:

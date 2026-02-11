@@ -603,6 +603,54 @@ class TestRenderTerminal:
         assert "£11.06" in output
 
 
+class TestMainCli:
+    def test_no_active_subscription_exits_with_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # Settings with an expired subscription
+        settings_path = tmp_path / "settings.json"
+        settings_path.write_text(json.dumps({
+            "subscriptions": [
+                {"plan": "Old Plan", "cost": 100, "currency": "USD",
+                 "start": "2020-01-01", "end": "2020-01-31"},
+            ],
+        }))
+        csv_path = tmp_path / "stats.csv"
+        csv_path.write_text("session_id,cost_usd\ns1,1.0\n")
+
+        monkeypatch.setattr(usage, "CSV_PATH", str(csv_path))
+        monkeypatch.setattr(usage, "SETTINGS_PATH", str(settings_path))
+        # Ensure --dev is not in argv
+        monkeypatch.setattr("sys.argv", ["usage.py"])
+
+        rc = usage.main()
+        assert rc == 1
+
+        captured = capsys.readouterr()
+        assert "no active subscription" in captured.err
+        assert "Old Plan" in captured.err
+        assert "2020-01-31" in captured.err
+
+    def test_no_subscriptions_at_all(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        settings_path = tmp_path / "settings.json"
+        settings_path.write_text("{}")
+        csv_path = tmp_path / "stats.csv"
+        csv_path.write_text("session_id,cost_usd\ns1,1.0\n")
+
+        monkeypatch.setattr(usage, "CSV_PATH", str(csv_path))
+        monkeypatch.setattr(usage, "SETTINGS_PATH", str(settings_path))
+        monkeypatch.setattr("sys.argv", ["usage.py"])
+
+        rc = usage.main()
+        assert rc == 1
+
+        captured = capsys.readouterr()
+        assert "no active subscription" in captured.err
+        assert "no subscriptions configured" in captured.err
+
+
 class TestFormatHelpers:
     def test_fmt_cost_usd_default(self) -> None:
         assert usage._fmt_cost(0.0) == "$0.00"
