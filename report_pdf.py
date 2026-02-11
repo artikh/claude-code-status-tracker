@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -391,6 +392,11 @@ def main() -> int:
             output_path = os.path.join(SCRIPT_DIR, "data", "dev", "usage-report.pdf")
         else:
             output_path = os.path.join(DATA_DIR, "usage-report.pdf")
+
+    compact_cmd = [sys.executable, os.path.join(SCRIPT_DIR, "compact.py")]
+    if dev_mode:
+        compact_cmd.append("--dev")
+    subprocess.run(compact_cmd)
 
     settings = load_settings(settings_path)
     today = datetime.now(settings.tz).date()

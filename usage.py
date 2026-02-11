@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
@@ -701,13 +702,20 @@ def render_terminal(report: UsageReport, color: bool = True) -> str:
 
 
 def main() -> int:
-    if "--dev" in sys.argv:
+    dev = "--dev" in sys.argv
+
+    if dev:
         data_dir = os.path.join(SCRIPT_DIR, "data", "dev")
         csv_path = os.path.join(data_dir, "stats.csv")
         settings_path = os.path.join(data_dir, "settings.json")
     else:
         csv_path = CSV_PATH
         settings_path = SETTINGS_PATH
+
+    compact_cmd = [sys.executable, os.path.join(SCRIPT_DIR, "compact.py")]
+    if dev:
+        compact_cmd.append("--dev")
+    subprocess.run(compact_cmd)
 
     settings = load_settings(settings_path)
 
