@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import sys
@@ -12,6 +13,10 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 from fpdf import FPDF
+
+# Suppress fontTools warnings about Apple-specific font tables (Zapf, feat, morx)
+# and minor quirks in macOS system Helvetica.ttc (timestamp, post.stringData padding).
+logging.getLogger("fontTools").setLevel(logging.ERROR)
 
 from usage import (
     CURRENCY_SYMBOLS,
@@ -90,11 +95,16 @@ COLOR_BLACK = (0, 0, 0)
 COLOR_DARK = (51, 51, 51)
 
 
+FONT = "HelvUni"
+
+
 class PdfReport:
     def __init__(self, tz: ZoneInfo) -> None:
         self.tz = tz
         self.pdf = FPDF()
         self.pdf.set_auto_page_break(auto=True, margin=20)
+        self.pdf.add_font(FONT, "", "/System/Library/Fonts/Helvetica.ttc")
+        self.pdf.add_font(FONT, "B", "/System/Library/Fonts/Helvetica.ttc")
 
     def generate(
         self, reports: list[SubscriptionReport], settings: Settings
@@ -115,12 +125,12 @@ class PdfReport:
         pdf.add_page()
 
         # Title
-        pdf.set_font("Helvetica", "B", 24)
+        pdf.set_font(FONT, "B", 24)
         pdf.cell(0, 15, "Claude Code Usage Report", new_x="LMARGIN", new_y="NEXT")
 
         # Generation timestamp
         now = datetime.now(self.tz)
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT, "", 10)
         pdf.set_text_color(*COLOR_GRAY)
         pdf.cell(
             0, 7,
@@ -131,7 +141,7 @@ class PdfReport:
         pdf.ln(10)
 
         # Summary table
-        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_font(FONT, "B", 14)
         pdf.cell(0, 10, "Finished Subscriptions", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(3)
 
@@ -139,14 +149,14 @@ class PdfReport:
         headers = ["Plan", "Period", "Budget", "Used", "%", "Sessions"]
 
         # Table header
-        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_font(FONT, "B", 9)
         pdf.set_fill_color(240, 240, 240)
         for i, header in enumerate(headers):
             pdf.cell(col_widths[i], 8, header, border=1, fill=True)
         pdf.ln()
 
         # Table rows
-        pdf.set_font("Helvetica", "", 9)
+        pdf.set_font(FONT, "", 9)
         for r in reports:
             sub = r.subscription
             period = f"{sub.start.strftime('%b %-d')} - {sub.end.strftime('%b %-d, %Y')}"
@@ -173,11 +183,11 @@ class PdfReport:
         pdf.add_page()
 
         # Header
-        pdf.set_font("Helvetica", "B", 18)
+        pdf.set_font(FONT, "B", 18)
         pdf.set_text_color(*COLOR_BLACK)
         pdf.cell(0, 12, sub.plan, new_x="LMARGIN", new_y="NEXT")
 
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT, "", 10)
         pdf.set_text_color(*COLOR_GRAY)
         period = (
             f"{sub.start.strftime('%b %-d, %Y')} - {sub.end.strftime('%b %-d, %Y')}"
@@ -202,7 +212,7 @@ class PdfReport:
 
     def _stats_block(self, stats: PeriodStats, sub: Subscription) -> None:
         pdf = self.pdf
-        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_font(FONT, "B", 12)
         pdf.cell(0, 8, "Overview", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
 
@@ -228,11 +238,11 @@ class PdfReport:
         if stats.extended_context_count > 0:
             rows.append(("Extended context", str(stats.extended_context_count)))
 
-        pdf.set_font("Helvetica", "", 10)
+        pdf.set_font(FONT, "", 10)
         for label, value in rows:
-            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_font(FONT, "B", 10)
             pdf.cell(35, 6, label)
-            pdf.set_font("Helvetica", "", 10)
+            pdf.set_font(FONT, "", 10)
             pdf.cell(0, 6, value, new_x="LMARGIN", new_y="NEXT")
 
     def _workspace_table(
@@ -240,20 +250,20 @@ class PdfReport:
     ) -> None:
         pdf = self.pdf
 
-        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_font(FONT, "B", 12)
         pdf.cell(0, 8, "Workspaces", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
 
         col_widths = [52, 20, 25, 22, 22, 25, 25]
         headers = ["Path", "Sessions", "Cost", "+Lines", "-Lines", "Duration", "Dates"]
 
-        pdf.set_font("Helvetica", "B", 8)
+        pdf.set_font(FONT, "B", 8)
         pdf.set_fill_color(240, 240, 240)
         for i, header in enumerate(headers):
             pdf.cell(col_widths[i], 7, header, border=1, fill=True)
         pdf.ln()
 
-        pdf.set_font("Helvetica", "", 8)
+        pdf.set_font(FONT, "", 8)
         for ws in workspaces:
             # Truncate long paths
             path = ws.project_dir
@@ -286,7 +296,7 @@ class PdfReport:
     ) -> None:
         pdf = self.pdf
 
-        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_font(FONT, "B", 12)
         pdf.cell(
             0, 8,
             f"Activity by Hour ({self.tz})",
@@ -299,7 +309,7 @@ class PdfReport:
         # Lines changed histogram
         max_lines = max(hist.lines_changed)
         if max_lines > 0:
-            pdf.set_font("Helvetica", "B", 9)
+            pdf.set_font(FONT, "B", 9)
             pdf.cell(0, 6, "Lines changed", new_x="LMARGIN", new_y="NEXT")
             self._draw_histogram(
                 hist.lines_changed,
@@ -313,7 +323,7 @@ class PdfReport:
         # Cost histogram
         max_cost = max(hist.cost)
         if max_cost > 0:
-            pdf.set_font("Helvetica", "B", 9)
+            pdf.set_font(FONT, "B", 9)
             pdf.cell(0, 6, "Cost", new_x="LMARGIN", new_y="NEXT")
             self._draw_histogram(
                 hist.cost,
@@ -336,7 +346,7 @@ class PdfReport:
         label_width = 15
         value_margin = 2
 
-        pdf.set_font("Helvetica", "", 8)
+        pdf.set_font(FONT, "", 8)
         for hour, val in enumerate(values):
             if val == 0:
                 continue
@@ -387,12 +397,6 @@ def main() -> int:
             output_path = arg.split("=", 1)[1]
             break
 
-    if output_path is None:
-        if dev_mode:
-            output_path = os.path.join(SCRIPT_DIR, "data", "dev", "usage-report.pdf")
-        else:
-            output_path = os.path.join(DATA_DIR, "usage-report.pdf")
-
     compact_cmd = [sys.executable, os.path.join(SCRIPT_DIR, "compact.py")]
     if dev_mode:
         compact_cmd.append("--dev")
@@ -405,6 +409,14 @@ def main() -> int:
     if not finished:
         print("No finished subscriptions found.", file=sys.stderr)
         return 1
+
+    if output_path is None:
+        start = finished[0].start.strftime("%Y-%m-%d")
+        end = finished[-1].end.strftime("%Y-%m-%d")
+        filename = f"usage-report_{start}_{end}.pdf"
+        reports_dir = os.path.join(SCRIPT_DIR, "reports", "dev") if dev_mode else os.path.join(SCRIPT_DIR, "reports")
+        os.makedirs(reports_dir, exist_ok=True)
+        output_path = os.path.join(reports_dir, filename)
 
     df = load_sessions(csv_path)
     if df.empty:

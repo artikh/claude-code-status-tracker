@@ -108,8 +108,8 @@ just sessions-dev    # dev data
 Generates a PDF report covering **all finished subscriptions** (where `end < today`), reusing the analytics layer from `usage.py`.
 
 ```bash
-just report          # production data → data/usage-report.pdf
-just report-dev      # dev data → data/dev/usage-report.pdf
+just report          # production data → reports/usage-report_{dates}.pdf
+just report-dev      # dev data → reports/dev/usage-report_{dates}.pdf
 uv run report_pdf.py --output custom.pdf
 ```
 

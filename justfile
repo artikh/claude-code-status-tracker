@@ -91,7 +91,7 @@ _ensure-dirs:
     set -euo pipefail
     G='\033[0;32m' Y='\033[0;33m' C='\033[0;36m' N='\033[0m'
     echo -e "\n${C}Data directories${N}"
-    for dir in data data/dev; do
+    for dir in data data/dev reports reports/dev; do
         if [[ -d "$dir" ]]; then
             echo -e "  ${G}✔${N} $dir/"
         else
