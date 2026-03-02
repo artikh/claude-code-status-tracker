@@ -9,6 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
-# Session logs
+# Session logs (but keep settings)
 data/
+!data/settings.json
 

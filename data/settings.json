@@ -1,0 +1,21 @@
+{
+  "subscriptions": [
+    {
+      "plan": "Claude Max 20x",
+      "cost": 150.00,
+      "currency": "GBP",
+      "usd_rate": 1.37000968,
+      "start": "2026-01-29",
+      "end": "2026-02-28"
+    },
+    {
+      "plan": "Claude Max 20x",
+      "cost": 180.00,
+      "currency": "GBP",
+      "usd_rate": 1.34104774,
+      "start": "2026-03-01",
+      "end": "2026-03-31"
+    }
+  ],
+  "timezone": "UTC"
+}
