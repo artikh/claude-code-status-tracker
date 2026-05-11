@@ -15,6 +15,14 @@
       "usd_rate": 1.34104774,
       "start": "2026-03-01",
       "end": "2026-03-31"
+    },
+    {
+      "plan": "Claude Max 20x",
+      "cost": 180.00,
+      "currency": "GBP",
+      "usd_rate": 1.34655417,
+      "start": "2026-04-18",
+      "end": "2026-05-18"
     }
   ],
   "timezone": "UTC"
