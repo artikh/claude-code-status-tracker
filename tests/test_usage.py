@@ -110,7 +110,7 @@ class TestTimePeriods:
             {"first_active": today_ts, "cost_usd": 5.0},
             {"first_active": yesterday_ts, "cost_usd": 3.0},
         ])
-        periods = compute_time_periods(df, tz, None)
+        periods = compute_time_periods(df, tz, None, [])
 
         # First period is Today
         today_period = periods[0]
@@ -129,21 +129,43 @@ class TestTimePeriods:
             plan="Max 20x", cost=150.0, currency="GBP",
             start=date(2026, 1, 29), end=date(2026, 2, 28), usd_rate=1.24,
         )
-        periods = compute_time_periods(df, tz, sub)
+        periods = compute_time_periods(df, tz, sub, [sub])
 
-        # Last period should be billing
-        billing = periods[-1]
-        assert "Billing Period" in billing.name
+        billing = next(p for p in periods if "Billing Period" in p.name)
         assert billing.stats.session_count == 2
         assert billing.stats.total_cost == 8.0
+
+    def test_all_time_period(self) -> None:
+        tz = ZoneInfo("UTC")
+        df = make_sessions_df([
+            {"first_active": "2026-02-01T10:00:00+00:00", "cost_usd": 5.0},
+            {"first_active": "2026-02-15T10:00:00+00:00", "cost_usd": 3.0},
+            {"first_active": "2026-01-01T10:00:00+00:00", "cost_usd": 99.0},
+        ])
+        sub = Subscription(
+            plan="Max 20x", cost=150.0, currency="GBP",
+            start=date(2026, 1, 29), end=date(2026, 2, 28), usd_rate=1.24,
+        )
+        periods = compute_time_periods(df, tz, sub, [sub])
+
+        # All Time is the last period; spend is per-session converted to GBP
+        all_time = periods[-1]
+        assert all_time.name == "All Time"
+        assert all_time.stats.session_count == 3
+        # (5 + 3 + 99) USD / 1.24 = ~86.29 GBP
+        assert all_time.stats.total_cost == pytest.approx(107.0 / 1.24)
+        assert all_time.display_currency == "GBP"
+        assert all_time.total_budget == 150.0
+        assert all_time.budget_label == "All Subs"
 
     def test_no_subscription(self) -> None:
         tz = ZoneInfo("UTC")
         df = make_sessions_df([{"first_active": "2026-02-11T10:00:00+00:00"}])
-        periods = compute_time_periods(df, tz, None)
+        periods = compute_time_periods(df, tz, None, [])
         # Should have 4 periods: Today, Yesterday, This Week, This Month
         assert len(periods) == 4
         assert all("Billing" not in p.name for p in periods)
+        assert all(p.name != "All Time" for p in periods)
 
 
 class TestWorkspaceStats:
@@ -546,14 +568,15 @@ class TestRenderTerminal:
             start=date(2026, 1, 29), end=date(2026, 2, 28),
         )
         report = self._make_report(sub=over_sub)
-        output = render_terminal(report, color=False)
-        assert "OVER BUDGET" in output
+        output = render_terminal(report, color=True)
+        # $13.71 / $10 = 137%, rendered red
+        assert "137% Cheap" in output
+        assert "\033[31m" in output
 
     def test_no_subscription(self) -> None:
         report = self._make_report(sub=None)
         output = render_terminal(report, color=False)
         assert "£" not in output
-        assert "OVER BUDGET" not in output
 
     def test_no_color_strips_ansi(self) -> None:
         report = self._make_report()

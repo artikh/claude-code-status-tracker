@@ -211,6 +211,12 @@ class TimePeriod:
     start: date
     end: date
     stats: PeriodStats
+    # When set, `stats.total_cost` is in `display_currency` (already converted
+    # from USD per-session), and the budget pill compares against `total_budget`
+    # (in the same currency) using `budget_label` as the plan name.
+    display_currency: str | None = None
+    total_budget: float | None = None
+    budget_label: str | None = None
 
 
 @dataclass
@@ -285,9 +291,12 @@ def filter_by_date_range(
 
 
 def compute_time_periods(
-    df: pd.DataFrame, tz: ZoneInfo, active_sub: Subscription | None
+    df: pd.DataFrame,
+    tz: ZoneInfo,
+    active_sub: Subscription | None,
+    subscriptions: list[Subscription],
 ) -> list[TimePeriod]:
-    """Compute stats for Today, Yesterday, This Week, This Month, Billing Period."""
+    """Compute stats for Today, Yesterday, This Week, This Month, Billing Period, All Time."""
     now = datetime.now(tz)
     today = now.date()
     yesterday = today - timedelta(days=1)
@@ -343,6 +352,40 @@ def compute_time_periods(
                 stats=compute_stats(
                     filter_by_date_range(df, active_sub.start, active_sub.end, tz)
                 ),
+            )
+        )
+
+    if subscriptions:
+        latest = max(subscriptions, key=lambda s: s.end)
+        display_currency = latest.currency
+        fallback_rate = latest.usd_rate
+
+        # Total budget: sum each sub's native cost (per-sub rate, no USD round-trip).
+        total_budget = sum(s.cost for s in subscriptions)
+
+        # Total spend: convert each session's USD cost through its own
+        # contemporary sub's rate, then aggregate via compute_stats.
+        converted = df.copy()
+        if not converted.empty and "first_active" in converted.columns:
+            converted["cost_usd"] = converted.apply(
+                lambda row: _convert_session_cost(
+                    float(row["cost_usd"]) if pd.notna(row["cost_usd"]) else 0.0,
+                    row["first_active"].date() if pd.notna(row["first_active"]) else date.min,
+                    subscriptions,
+                    fallback_rate,
+                ),
+                axis=1,
+            )
+
+        periods.append(
+            TimePeriod(
+                name="All Time",
+                start=min(s.start for s in subscriptions),
+                end=max(s.end for s in subscriptions),
+                stats=compute_stats(converted),
+                display_currency=display_currency,
+                total_budget=total_budget,
+                budget_label="All Subs",
             )
         )
 
@@ -440,7 +483,7 @@ def build_report(df: pd.DataFrame, settings: Settings) -> UsageReport:
     return UsageReport(
         generated_at=now,
         tz=settings.tz,
-        time_periods=compute_time_periods(df, settings.tz, active_sub),
+        time_periods=compute_time_periods(df, settings.tz, active_sub, settings.subscriptions),
         workspaces=compute_workspace_stats(df, settings.subscriptions),
         hour_histogram=compute_hour_histogram(df, settings.tz),
         subscription=active_sub,
@@ -547,21 +590,39 @@ def fmt_sub_pct(
     d = DIM if color else ""
     x = RESET if color else ""
     if pct > 100:
-        return f" {r}({pct:.0f}% {sub.plan} — OVER BUDGET){x}"
+        return f" {r}({pct:.0f}% {sub.plan}){x}"
     if pct >= 80:
         return f" {y}({pct:.0f}% {sub.plan}){x}"
     return f" {d}({pct:.0f}% {sub.plan}){x}"
+
+
+def fmt_custom_pct(cost: float, budget: float, label: str, color: bool) -> str:
+    """Budget pill for sections not tied to a single Subscription."""
+    if budget <= 0:
+        return ""
+    pct = cost / budget * 100
+    r = RED if color else ""
+    y = YELLOW if color else ""
+    d = DIM if color else ""
+    x = RESET if color else ""
+    if pct > 100:
+        return f" {r}({pct:.0f}% {label}){x}"
+    if pct >= 80:
+        return f" {y}({pct:.0f}% {label}){x}"
+    return f" {d}({pct:.0f}% {label}){x}"
 
 
 def _render_period_stats(
     s: PeriodStats, color: bool,
     sub: Subscription | None = None,
     currency: str | None = None,
+    pill_override: str | None = None,
 ) -> list[str]:
     """Render a PeriodStats block as indented lines.
 
     Pass sub for USD costs that need conversion.
     Pass currency for pre-converted costs (e.g. workspace stats).
+    Pass pill_override to inject a pre-computed budget pill instead of fmt_sub_pct.
     """
     g = GREEN if color else ""
     r = RED if color else ""
@@ -571,7 +632,11 @@ def _render_period_stats(
 
     lines: list[str] = []
 
-    sub_pct = fmt_sub_pct(s.total_cost, sub, color, pre_converted=currency is not None)
+    sub_pct = (
+        pill_override
+        if pill_override is not None
+        else fmt_sub_pct(s.total_cost, sub, color, pre_converted=currency is not None)
+    )
     lines.append(
         f"  Sessions: {s.session_count}    "
         f"Cost: {y}{fmt_cost(s.total_cost, sub, currency)}{x}{sub_pct}    "
@@ -636,6 +701,18 @@ def render_terminal(report: UsageReport, color: bool = True) -> str:
         lines.append(f"{c}\u25b8 {period.name}{x}")
         if period.stats.session_count == 0:
             lines.append(f"  {d}No sessions{x}")
+        elif period.display_currency is not None:
+            pill = fmt_custom_pct(
+                period.stats.total_cost,
+                period.total_budget or 0.0,
+                period.budget_label or "",
+                color,
+            )
+            lines.extend(_render_period_stats(
+                period.stats, color,
+                currency=period.display_currency,
+                pill_override=pill,
+            ))
         else:
             lines.extend(_render_period_stats(period.stats, color, sub))
         lines.append("")
