@@ -418,7 +418,7 @@ def main() -> int:
         os.makedirs(reports_dir, exist_ok=True)
         output_path = os.path.join(reports_dir, filename)
 
-    df = load_sessions(csv_path)
+    df = load_sessions(csv_path, settings)
     if df.empty:
         print("No session data found.", file=sys.stderr)
         return 1

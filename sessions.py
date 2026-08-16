@@ -188,7 +188,7 @@ def main() -> int:
     subprocess.run(compact_cmd)
 
     settings = load_settings(settings_path)
-    df = load_sessions(csv_path)
+    df = load_sessions(csv_path, settings)
 
     if df.empty:
         print("No session data found.")

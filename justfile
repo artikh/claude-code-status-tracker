@@ -109,7 +109,7 @@ _ensure-settings:
     if [[ -f "$SETTINGS" ]]; then
         echo -e "  ${G}✔${N} $SETTINGS exists"
     else
-        echo '{"subscriptions": [], "timezone": "UTC"}' > "$SETTINGS"
+        echo '{"subscriptions": [], "timezone": "UTC", "worktree_patterns": ["^(?P<root>.+)/trees(/|$)"], "workspace_aliases": {}}' > "$SETTINGS"
         echo -e "  ${Y}✔${N} $SETTINGS ${Y}(created)${N}"
     fi
 

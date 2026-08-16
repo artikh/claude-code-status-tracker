@@ -84,7 +84,10 @@ just usage-dev       # dev data
 
 **Architecture:** Three layers — data loading, pure analytics (DataFrame → dataclasses), and terminal rendering. The `build_report()` function returns a `UsageReport` dataclass tree, making it easy to add alternative renderers (e.g. PDF) without rewriting analytics code.
 
-**Settings:** `data/settings.json` configures billing period dates and timezone (IANA names). All fields optional.
+**Settings:** `data/settings.json` configures billing period dates and timezone (IANA names). All fields optional. Two keys normalize workspace paths for reporting (applied at read time in `load_sessions`; raw data in `session.jsonl`/`stats.csv` is untouched):
+
+- `worktree_patterns` — list of regexes tried in order against `project_dir` with `re.match`; on first match the path is replaced by the `root` named group (or group 1). Default seed `"^(?P<root>.+)/trees(/|$)"` collapses multi-agent worktrees like `/src/foo/trees/agent-1/server` → `/src/foo`.
+- `workspace_aliases` — `{from_path: to_path}` mapping that merges workspaces for reporting; prefix-aware (a path under `from_path` is rewritten too). Applied after worktree patterns.
 
 **Output sections:** Time periods (Today, Yesterday, This Week, This Month, Billing Period), workspace breakdown, and hourly activity histogram.
 

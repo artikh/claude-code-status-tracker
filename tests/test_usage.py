@@ -27,6 +27,7 @@ from usage import (
     find_active_subscription,
     load_sessions,
     load_settings,
+    normalize_workspace,
     render_terminal,
 )
 
@@ -406,6 +407,35 @@ class TestLoadSettings:
         s = load_settings(str(path))
         assert str(s.tz) == "UTC"
 
+    def test_worktree_patterns_and_aliases(self, tmp_path: Path) -> None:
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({
+            "worktree_patterns": ["^(?P<root>.+)/trees(/|$)"],
+            "workspace_aliases": {"/Users/artem/Documents/beancount": "/src/beancount"},
+        }))
+        s = load_settings(str(path))
+        assert len(s.worktree_patterns) == 1
+        assert s.worktree_patterns[0].pattern == "^(?P<root>.+)/trees(/|$)"
+        assert s.workspace_aliases == {"/Users/artem/Documents/beancount": "/src/beancount"}
+
+    def test_worktree_patterns_default_empty(self, tmp_path: Path) -> None:
+        path = tmp_path / "settings.json"
+        path.write_text("{}")
+        s = load_settings(str(path))
+        assert s.worktree_patterns == []
+        assert s.workspace_aliases == {}
+
+    def test_invalid_worktree_pattern_skipped(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        path = tmp_path / "settings.json"
+        path.write_text(json.dumps({
+            "worktree_patterns": ["(unclosed", 42, "^(?P<root>.+)/trees(/|$)"],
+        }))
+        s = load_settings(str(path))
+        assert len(s.worktree_patterns) == 1
+        assert "warning" in capsys.readouterr().err
+
 
 class TestLoadSessions:
     def test_loads_csv(self, tmp_path: Path) -> None:
@@ -433,6 +463,112 @@ class TestLoadSessions:
         )
         df = load_sessions(str(csv))
         assert df.empty
+
+
+def worktree_settings(aliases: dict[str, str] | None = None) -> Settings:
+    return Settings(
+        worktree_patterns=[re.compile(r"^(?P<root>.+)/trees(/|$)")],
+        workspace_aliases=aliases or {},
+    )
+
+
+class TestNormalizeWorkspace:
+    def test_worktree_collapsed_to_root(self) -> None:
+        s = worktree_settings()
+        assert normalize_workspace("/src/shvengern/trees/agent-1", s) == "/src/shvengern"
+        assert normalize_workspace("/src/shvengern/trees/agent-2", s) == "/src/shvengern"
+
+    def test_deep_subdir_inside_worktree(self) -> None:
+        s = worktree_settings()
+        assert normalize_workspace("/src/shvengern/trees/agent-1/server", s) == "/src/shvengern"
+
+    def test_bare_trees_dir(self) -> None:
+        s = worktree_settings()
+        assert normalize_workspace("/src/shvengern/trees", s) == "/src/shvengern"
+
+    def test_no_match_unchanged(self) -> None:
+        s = worktree_settings()
+        assert normalize_workspace("/src/shvengern", s) == "/src/shvengern"
+        assert normalize_workspace("/src/other-project", s) == "/src/other-project"
+
+    def test_unnamed_group_used(self) -> None:
+        s = Settings(worktree_patterns=[re.compile(r"^(.+)/worktrees/")])
+        assert normalize_workspace("/src/foo/worktrees/wt1", s) == "/src/foo"
+
+    def test_pattern_without_groups_is_noop(self) -> None:
+        s = Settings(worktree_patterns=[re.compile(r"^/src/")])
+        assert normalize_workspace("/src/foo", s) == "/src/foo"
+
+    def test_first_matching_pattern_wins(self) -> None:
+        s = Settings(worktree_patterns=[
+            re.compile(r"^(?P<root>.+)/trees(/|$)"),
+            re.compile(r"^(?P<root>/never)"),
+        ])
+        assert normalize_workspace("/src/foo/trees/a", s) == "/src/foo"
+
+    def test_alias_exact_match(self) -> None:
+        s = Settings(workspace_aliases={"/Users/artem/Documents/beancount": "/src/beancount"})
+        assert normalize_workspace("/Users/artem/Documents/beancount", s) == "/src/beancount"
+
+    def test_alias_prefix_match(self) -> None:
+        s = Settings(workspace_aliases={"/Users/artem/Documents/beancount": "/src/beancount"})
+        assert (
+            normalize_workspace("/Users/artem/Documents/beancount/importers", s)
+            == "/src/beancount/importers"
+        )
+
+    def test_alias_no_partial_segment_match(self) -> None:
+        s = Settings(workspace_aliases={"/src/foo": "/src/bar"})
+        assert normalize_workspace("/src/foobar", s) == "/src/foobar"
+
+    def test_alias_applied_after_worktree_collapse(self) -> None:
+        s = worktree_settings({"/Users/artem/Documents/beancount": "/src/beancount"})
+        assert (
+            normalize_workspace("/Users/artem/Documents/beancount/trees/agent-1", s)
+            == "/src/beancount"
+        )
+
+    def test_empty_settings_noop(self) -> None:
+        assert normalize_workspace("/src/foo/trees/a", Settings()) == "/src/foo/trees/a"
+
+
+class TestLoadSessionsNormalization:
+    CSV_TEXT = (
+        "session_id,first_active,last_active,cost_usd,project_dir,lines_added,"
+        "lines_removed,duration_ms,api_duration_ms,total_input_tokens,"
+        "total_output_tokens\n"
+        "s1,2026-02-11T10:00:00+00:00,2026-02-11T10:30:00+00:00,5.0,"
+        "/src/shvengern,10,2,60000,30000,1000,500\n"
+        "s2,2026-02-11T11:00:00+00:00,2026-02-11T11:30:00+00:00,3.0,"
+        "/src/shvengern/trees/agent-1,5,1,60000,30000,1000,500\n"
+        "s3,2026-02-11T12:00:00+00:00,2026-02-11T12:30:00+00:00,2.0,"
+        "/Users/artem/Documents/beancount,3,0,60000,30000,1000,500\n"
+    )
+
+    def test_normalized_with_settings(self, tmp_path: Path) -> None:
+        csv = tmp_path / "stats.csv"
+        csv.write_text(self.CSV_TEXT)
+        s = worktree_settings({"/Users/artem/Documents/beancount": "/src/beancount"})
+        df = load_sessions(str(csv), s)
+        assert list(df["project_dir"]) == [
+            "/src/shvengern", "/src/shvengern", "/src/beancount",
+        ]
+
+    def test_workspaces_merge_in_stats(self, tmp_path: Path) -> None:
+        csv = tmp_path / "stats.csv"
+        csv.write_text(self.CSV_TEXT)
+        df = load_sessions(str(csv), worktree_settings())
+        workspaces = compute_workspace_stats(df, [])
+        shvengern = [w for w in workspaces if w.project_dir == "/src/shvengern"]
+        assert len(shvengern) == 1
+        assert shvengern[0].stats.session_count == 2
+        assert shvengern[0].stats.total_cost == pytest.approx(8.0)
+
+    def test_without_settings_unchanged(self, tmp_path: Path) -> None:
+        csv = tmp_path / "stats.csv"
+        csv.write_text(self.CSV_TEXT)
+        df = load_sessions(str(csv))
+        assert "/src/shvengern/trees/agent-1" in list(df["project_dir"])
 
 
 class TestSubscription:

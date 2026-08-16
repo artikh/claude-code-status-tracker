@@ -49,5 +49,9 @@
       "end": "2026-08-23"
     }
   ],
-  "timezone": "UTC"
+  "timezone": "UTC",
+  "worktree_patterns": ["^(?P<root>.+)/trees(/|$)"],
+  "workspace_aliases": {
+    "/Users/artem/Documents/beancount": "/src/beancount"
+  }
 }

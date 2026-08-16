@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -61,6 +62,11 @@ class Subscription:
 class Settings:
     tz: ZoneInfo = field(default_factory=lambda: ZoneInfo("UTC"))
     subscriptions: list[Subscription] = field(default_factory=list)
+    # Regexes matched against project_dir; the "root" (or first) group replaces
+    # the path, collapsing worktrees like /src/foo/trees/agent-1 → /src/foo.
+    worktree_patterns: list[re.Pattern[str]] = field(default_factory=list)
+    # {from_path: to_path} — merges workspaces for reporting (prefix-aware).
+    workspace_aliases: dict[str, str] = field(default_factory=dict)
 
 
 def _parse_subscriptions(raw_list: list[dict]) -> list[Subscription]:
@@ -136,16 +142,78 @@ def load_settings(path: str = SETTINGS_PATH) -> Settings:
             print(f"usage: warning: bad subscriptions config: {e}", file=sys.stderr)
             s.subscriptions = []
 
+    raw_patterns = raw.get("worktree_patterns", [])
+    if isinstance(raw_patterns, list):
+        for item in raw_patterns:
+            if not isinstance(item, str):
+                print(
+                    f"usage: warning: worktree_patterns entry is not a string: {item!r}",
+                    file=sys.stderr,
+                )
+                continue
+            try:
+                s.worktree_patterns.append(re.compile(item))
+            except re.error as e:
+                print(
+                    f"usage: warning: bad worktree pattern {item!r}: {e}",
+                    file=sys.stderr,
+                )
+
+    raw_aliases = raw.get("workspace_aliases", {})
+    if isinstance(raw_aliases, dict):
+        s.workspace_aliases = {
+            str(k): str(v) for k, v in raw_aliases.items()
+        }
+
     return s
 
 
-def load_sessions(csv_path: str = CSV_PATH) -> pd.DataFrame:
-    """Load stats.csv, parse timestamps, cast numerics."""
+def normalize_workspace(path: str, settings: Settings) -> str:
+    """Canonicalize a workspace path for reporting.
+
+    Worktree patterns collapse multi-agent checkouts to their parent workspace
+    (first match wins, using the "root" group if named, else group 1), then
+    workspace aliases rewrite a path — or any path under it — to another one.
+    """
+    for pattern in settings.worktree_patterns:
+        m = pattern.match(path)
+        if not m:
+            continue
+        if "root" in pattern.groupindex:
+            root = m.group("root")
+        elif pattern.groups >= 1:
+            root = m.group(1)
+        else:
+            root = None
+        if root:
+            path = root
+        break
+
+    for src, dst in settings.workspace_aliases.items():
+        if path == src or path.startswith(src + "/"):
+            return dst + path[len(src):]
+
+    return path
+
+
+def load_sessions(
+    csv_path: str = CSV_PATH, settings: Settings | None = None
+) -> pd.DataFrame:
+    """Load stats.csv, parse timestamps, cast numerics.
+
+    When settings is given, project_dir is normalized via normalize_workspace
+    so worktrees and aliased workspaces report as one.
+    """
     if not os.path.exists(csv_path):
         return pd.DataFrame()
     df = pd.read_csv(csv_path)
     if df.empty:
         return df
+
+    if settings is not None and "project_dir" in df.columns:
+        df["project_dir"] = df["project_dir"].map(
+            lambda p: normalize_workspace(p, settings) if isinstance(p, str) else p
+        )
 
     for col in ("first_active", "last_active"):
         if col in df.columns:
@@ -810,7 +878,7 @@ def main() -> int:
             print("  no subscriptions configured in settings.json", file=sys.stderr)
         return 1
 
-    df = load_sessions(csv_path)
+    df = load_sessions(csv_path, settings)
 
     if df.empty:
         print("No session data found.")
